@@ -133,30 +133,65 @@ if HAS_FASTAPI:
 
             start_date = request.get("start_date", "2024-01-01")
             end_date = request.get("end_date", "2024-06-01")
-            min_price = request.get("min_price", 5)
-            max_price = request.get("max_price", 50)
             max_stocks = request.get("max_stocks", 200)
+            strategy = request.get("strategy", "custom")
 
-            filters = [PriceFilter(min_price=min_price, max_price=max_price)]
-
-            max_pe = request.get("max_pe", 100)
-            min_roe = request.get("min_roe", 0)
-            if max_pe < 100 or min_roe > 0:
-                from ..screener import FundamentalFilter
-                if max_pe < 100:
-                    filters.append(FundamentalFilter(metric="pe", condition="lt", value=max_pe))
-                if min_roe > 0:
-                    filters.append(FundamentalFilter(metric="roe", condition="gt", value=min_roe))
-
-            def _run_screener_sync():
-                universe = AkshareUniverseProvider()
-                screener = Screener(universe_provider=universe, filters=filters)
-                return screener.run(
-                    start_date=start_date,
-                    end_date=end_date,
-                    max_workers=4,
-                    max_stocks=max_stocks,
+            if strategy == "momentum_breakout":
+                from ..screener import (
+                    BoardFilter, STFilter, LimitUpFilter,
+                    MoneyFlowFilter, TechnicalFilter,
+                    AkshareDataProvider,
                 )
+                filters = [
+                    BoardFilter(boards=("沪主板", "深主板")),
+                    STFilter(),
+                    LimitUpFilter(
+                        lookback_days=10,
+                        require_in_period=True,
+                        exclude_consecutive=True,
+                        exclude_current=True,
+                    ),
+                    MoneyFlowFilter(days=3, min_total=3000),
+                    TechnicalFilter(indicator="sma", condition="gt", value=0, period=5),
+                ]
+
+                def _run_screener_sync():
+                    universe = AkshareUniverseProvider()
+                    provider = AkshareDataProvider()
+                    screener = Screener(
+                        universe_provider=universe,
+                        filters=filters,
+                        data_provider=provider,
+                    )
+                    return screener.run(
+                        start_date=start_date,
+                        end_date=end_date,
+                        max_workers=4,
+                        max_stocks=max_stocks,
+                    )
+            else:
+                min_price = request.get("min_price", 5)
+                max_price = request.get("max_price", 50)
+                filters = [PriceFilter(min_price=min_price, max_price=max_price)]
+
+                max_pe = request.get("max_pe", 100)
+                min_roe = request.get("min_roe", 0)
+                if max_pe < 100 or min_roe > 0:
+                    from ..screener import FundamentalFilter
+                    if max_pe < 100:
+                        filters.append(FundamentalFilter(metric="pe", condition="lt", value=max_pe))
+                    if min_roe > 0:
+                        filters.append(FundamentalFilter(metric="roe", condition="gt", value=min_roe))
+
+                def _run_screener_sync():
+                    universe = AkshareUniverseProvider()
+                    screener = Screener(universe_provider=universe, filters=filters)
+                    return screener.run(
+                        start_date=start_date,
+                        end_date=end_date,
+                        max_workers=4,
+                        max_stocks=max_stocks,
+                    )
 
             # Run in thread pool to avoid blocking the event loop
             loop = asyncio.get_event_loop()

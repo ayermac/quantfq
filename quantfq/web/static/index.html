@@ -188,39 +188,70 @@
             <div class="grid">
                 <div class="card">
                     <h2>筛选条件</h2>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>开始日期</label>
-                            <input type="date" id="sc-start" value="2024-01-01">
-                        </div>
-                        <div class="form-group">
-                            <label>结束日期</label>
-                            <input type="date" id="sc-end" value="2024-06-01">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>最低价格 (元)</label>
-                            <input type="number" id="sc-min-price" value="5" step="1">
-                        </div>
-                        <div class="form-group">
-                            <label>最高价格 (元)</label>
-                            <input type="number" id="sc-max-price" value="50" step="1">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>最低成交量</label>
-                            <input type="number" id="sc-min-vol" value="1000000" step="100000">
-                        </div>
-                        <div class="form-group">
-                            <label>最大市盈率</label>
-                            <input type="number" id="sc-max-pe" value="30" step="1">
-                        </div>
-                    </div>
                     <div class="form-group">
-                        <label>最低净资产收益率 (%)</label>
-                        <input type="number" id="sc-min-roe" value="10" step="1">
+                        <label>选股策略</label>
+                        <select id="sc-strategy" onchange="toggleScreenerMode()">
+                            <option value="custom">自定义筛选</option>
+                            <option value="momentum_breakout">动量突破选股（7条件）</option>
+                        </select>
+                    </div>
+                    <div id="sc-custom-fields">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>开始日期</label>
+                                <input type="date" id="sc-start" value="2024-01-01">
+                            </div>
+                            <div class="form-group">
+                                <label>结束日期</label>
+                                <input type="date" id="sc-end" value="2024-06-01">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>最低价格 (元)</label>
+                                <input type="number" id="sc-min-price" value="5" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label>最高价格 (元)</label>
+                                <input type="number" id="sc-max-price" value="50" step="1">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>最低成交量</label>
+                                <input type="number" id="sc-min-vol" value="1000000" step="100000">
+                            </div>
+                            <div class="form-group">
+                                <label>最大市盈率</label>
+                                <input type="number" id="sc-max-pe" value="30" step="1">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>最低净资产收益率 (%)</label>
+                            <input type="number" id="sc-min-roe" value="10" step="1">
+                        </div>
+                    </div>
+                    <div id="sc-momentum-fields" style="display:none">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>开始日期</label>
+                                <input type="date" id="sc-m-start" value="2025-01-01">
+                            </div>
+                            <div class="form-group">
+                                <label>结束日期</label>
+                                <input type="date" id="sc-m-end" value="2025-05-01">
+                            </div>
+                        </div>
+                        <div class="info-box" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;font-size:13px;line-height:1.6">
+                            <strong>策略条件：</strong><br>
+                            1. 沪深主板个股<br>
+                            2. 非ST个股<br>
+                            3. 近10日内有涨停<br>
+                            4. 非连板<br>
+                            5. 近3日大单净流入 > 3000万<br>
+                            6. 位于5日均线之上<br>
+                            7. 当前非涨停
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>最大扫描数量 (0=不限)</label>
@@ -496,17 +527,35 @@
         }
 
         // ==================== Screener ====================
+        function toggleScreenerMode() {
+            const strategy = document.getElementById('sc-strategy').value;
+            document.getElementById('sc-custom-fields').style.display = strategy === 'custom' ? '' : 'none';
+            document.getElementById('sc-momentum-fields').style.display = strategy === 'momentum_breakout' ? '' : 'none';
+        }
+
         async function runScreener() {
-            const body = {
-                start_date: document.getElementById('sc-start').value,
-                end_date: document.getElementById('sc-end').value,
-                min_price: parseFloat(document.getElementById('sc-min-price').value),
-                max_price: parseFloat(document.getElementById('sc-max-price').value),
-                min_volume: parseFloat(document.getElementById('sc-min-vol').value),
-                max_pe: parseFloat(document.getElementById('sc-max-pe').value),
-                min_roe: parseFloat(document.getElementById('sc-min-roe').value),
-                max_stocks: parseInt(document.getElementById('sc-max-stocks').value) || 200,
-            };
+            const strategy = document.getElementById('sc-strategy').value;
+            let body;
+            if (strategy === 'momentum_breakout') {
+                body = {
+                    strategy: 'momentum_breakout',
+                    start_date: document.getElementById('sc-m-start').value,
+                    end_date: document.getElementById('sc-m-end').value,
+                    max_stocks: 200,
+                };
+            } else {
+                body = {
+                    strategy: 'custom',
+                    start_date: document.getElementById('sc-start').value,
+                    end_date: document.getElementById('sc-end').value,
+                    min_price: parseFloat(document.getElementById('sc-min-price').value),
+                    max_price: parseFloat(document.getElementById('sc-max-price').value),
+                    min_volume: parseFloat(document.getElementById('sc-min-vol').value),
+                    max_pe: parseFloat(document.getElementById('sc-max-pe').value),
+                    min_roe: parseFloat(document.getElementById('sc-min-roe').value),
+                    max_stocks: parseInt(document.getElementById('sc-max-stocks').value) || 200,
+                };
+            }
             showStatus('正在扫描 A 股市场...', 'loading');
             setBtnLoading('sc-run-btn', true);
             try {
