@@ -135,29 +135,15 @@ if HAS_FASTAPI:
             end_date = request.get("end_date", "2024-06-01")
             max_stocks = request.get("max_stocks", 200)
             strategy = request.get("strategy", "custom")
+            from ..screener import STRATEGIES
 
-            if strategy == "momentum_breakout":
-                from ..screener import (
-                    BoardFilter, STFilter, LimitUpFilter,
-                    MoneyFlowFilter, TechnicalFilter,
-                    AkshareDataProvider,
-                )
-                filters = [
-                    BoardFilter(boards=("沪主板", "深主板")),
-                    STFilter(),
-                    LimitUpFilter(
-                        lookback_days=10,
-                        require_in_period=True,
-                        exclude_consecutive=True,
-                        exclude_current=True,
-                    ),
-                    MoneyFlowFilter(days=3, min_total=3000),
-                    TechnicalFilter(indicator="sma", condition="gt", value=0, period=5),
-                ]
+            if strategy in STRATEGIES:
+                strat = STRATEGIES[strategy]()
+                filters = strat.create_filters()
 
                 def _run_screener_sync():
                     universe = AkshareUniverseProvider()
-                    provider = AkshareDataProvider()
+                    provider = strat.get_data_provider()
                     screener = Screener(
                         universe_provider=universe,
                         filters=filters,
@@ -200,13 +186,13 @@ if HAS_FASTAPI:
                 timeout=120,
             )
 
-            _filter_labels = {
-                "board_沪主板_深主板": "沪深主板",
-                "non_st": "非ST",
-                "limit_up_10d_req_no_consec_no_current": "近期涨停",
-                "money_flow_3d_3000w": "资金流入",
-                "tech_sma_gt_0": "站上5日线",
-            }
+            _filter_labels = {}
+            if strategy in STRATEGIES:
+                strat_inst = STRATEGIES[strategy]()
+                _filter_labels = dict(zip(
+                    [f.name for f in strat_inst.create_filters()],
+                    strat_inst.meta.conditions,
+                ))
 
             candidates = []
             if not result.candidates.empty:
