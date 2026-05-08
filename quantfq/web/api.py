@@ -128,12 +128,14 @@ if HAS_FASTAPI:
     @app.post("/api/screener/run")
     async def run_screener(request: Dict[str, Any]):
         try:
+            import asyncio
             from ..screener import AkshareUniverseProvider, PriceFilter, Screener
 
             start_date = request.get("start_date", "2024-01-01")
             end_date = request.get("end_date", "2024-06-01")
             min_price = request.get("min_price", 5)
             max_price = request.get("max_price", 50)
+            max_stocks = request.get("max_stocks", 200)
 
             filters = [PriceFilter(min_price=min_price, max_price=max_price)]
 
@@ -146,9 +148,22 @@ if HAS_FASTAPI:
                 if min_roe > 0:
                     filters.append(FundamentalFilter(metric="roe", condition="gt", value=min_roe))
 
-            universe = AkshareUniverseProvider()
-            screener = Screener(universe_provider=universe, filters=filters)
-            result = screener.run(start_date=start_date, end_date=end_date)
+            def _run_screener_sync():
+                universe = AkshareUniverseProvider()
+                screener = Screener(universe_provider=universe, filters=filters)
+                return screener.run(
+                    start_date=start_date,
+                    end_date=end_date,
+                    max_workers=4,
+                    max_stocks=max_stocks,
+                )
+
+            # Run in thread pool to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, _run_screener_sync),
+                timeout=120,
+            )
 
             candidates = []
             if not result.candidates.empty:
@@ -170,6 +185,9 @@ if HAS_FASTAPI:
         except ImportError as e:
             logger.warning(f"Screener dependency missing: {e}")
             raise HTTPException(status_code=501, detail=f"Screener requires akshare: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Screener timed out (120s limit)")
+            raise HTTPException(status_code=504, detail="选股超时，请缩小筛选范围或稍后重试")
         except Exception as e:
             logger.exception("Screener failed")
             raise HTTPException(status_code=500, detail=str(e))

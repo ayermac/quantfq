@@ -55,6 +55,7 @@ class Screener:
         end_date: str,
         interval: str = "1d",
         max_workers: int = 4,
+        max_stocks: int = 0,
         exchanges: Optional[List[str]] = None,
         industries: Optional[List[str]] = None,
     ) -> ScreenerResult:
@@ -65,6 +66,10 @@ class Screener:
         if universe_df.empty:
             logger.warning("Universe is empty, nothing to screen")
             return ScreenerResult(candidates=pd.DataFrame())
+
+        if max_stocks > 0:
+            universe_df = universe_df.head(max_stocks)
+            logger.info(f"Limiting scan to {max_stocks} stocks")
 
         symbols = universe_df["symbol"].tolist()
         logger.info(f"Screening {len(symbols)} symbols with {len(self.filters)} filters")

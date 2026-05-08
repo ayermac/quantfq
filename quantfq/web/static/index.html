@@ -222,6 +222,10 @@
                         <label>最低净资产收益率 (%)</label>
                         <input type="number" id="sc-min-roe" value="10" step="1">
                     </div>
+                    <div class="form-group">
+                        <label>最大扫描数量 (0=不限)</label>
+                        <input type="number" id="sc-max-stocks" value="200" step="50" min="0">
+                    </div>
                     <div class="btn-group">
                         <button class="btn btn-primary" onclick="runScreener()" id="sc-run-btn">开始选股</button>
                         <button class="btn btn-secondary" onclick="clearResults('screener')">清空</button>
@@ -501,6 +505,7 @@
                 min_volume: parseFloat(document.getElementById('sc-min-vol').value),
                 max_pe: parseFloat(document.getElementById('sc-max-pe').value),
                 min_roe: parseFloat(document.getElementById('sc-min-roe').value),
+                max_stocks: parseInt(document.getElementById('sc-max-stocks').value) || 200,
             };
             showStatus('正在扫描 A 股市场...', 'loading');
             setBtnLoading('sc-run-btn', true);
