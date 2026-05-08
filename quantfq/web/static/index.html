@@ -541,7 +541,7 @@
                     strategy: 'momentum_breakout',
                     start_date: document.getElementById('sc-m-start').value,
                     end_date: document.getElementById('sc-m-end').value,
-                    max_stocks: 200,
+                    max_stocks: parseInt(document.getElementById('sc-max-stocks').value) || 200,
                 };
             } else {
                 body = {
