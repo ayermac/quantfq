@@ -200,19 +200,31 @@ if HAS_FASTAPI:
                 timeout=120,
             )
 
+            _filter_labels = {
+                "board_沪主板_深主板": "沪深主板",
+                "non_st": "非ST",
+                "limit_up_10d_req_no_consec_no_current": "近期涨停",
+                "money_flow_3d_3000w": "资金流入",
+                "tech_sma_gt_0": "站上5日线",
+            }
+
             candidates = []
             if not result.candidates.empty:
                 for _, row in result.candidates.iterrows():
+                    sym = row.get("symbol", "")
+                    passed = result.details.get(sym, {})
+                    labels = [_filter_labels.get(k, k) for k, v in passed.items() if v]
                     candidates.append({
-                        "symbol": row.get("symbol", ""),
+                        "symbol": sym,
                         "name": row.get("name", ""),
                         "price": row.get("price", 0),
                         "volume": row.get("volume", 0),
+                        "passed_filters": labels,
                     })
 
             response = {
                 "candidates": candidates,
-                "summary": result.summary(),
+                "summary": f"找到 {len(candidates)} 只符合全部条件的股票",
                 "total": len(candidates),
             }
             _results_cache["screener"] = response

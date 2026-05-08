@@ -296,12 +296,13 @@ class LimitUpFilter(Filter):
         if self.require_in_period and not is_limit_up.any():
             return False
 
-        # Condition 4: Exclude consecutive limit-up
+        # Condition 4: Exclude if the last limit-up is still in a consecutive streak
+        # (i.e. the most recent limit-up was NOT followed by a pullback day)
         if self.exclude_consecutive and self.require_in_period:
             limit_indices = is_limit_up[is_limit_up].index
-            for idx in limit_indices:
-                pos = lookback.index.get_loc(idx)
-                # Check if the next day is also limit-up
+            if len(limit_indices) > 0:
+                last_limit_idx = limit_indices[-1]
+                pos = lookback.index.get_loc(last_limit_idx)
                 if pos + 1 < len(lookback) and lookback.iloc[pos + 1] >= self.limit_pct:
                     return False
 
