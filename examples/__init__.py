@@ -1,0 +1,4 @@
+"""
+Examples for QuantFQ usage.
+"""
+

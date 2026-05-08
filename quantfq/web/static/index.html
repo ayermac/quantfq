@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantFQ 量化交易仪表盘</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e0e0e0;
+            --text-muted: #888;
+            --accent: #4f8cff;
+            --green: #26a69a;
+            --red: #ef5350;
+            --tab-active: #4f8cff;
+            --tab-hover: #2a2d3a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+        .header h1 { font-size: 20px; font-weight: 600; }
+        .header .version { color: var(--text-muted); font-size: 13px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 4px; margin-bottom: 20px; border: 1px solid var(--border); }
+        .tab { flex: 1; padding: 10px 16px; text-align: center; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--text-muted); transition: all 0.2s; border: none; background: none; }
+        .tab:hover { background: var(--tab-hover); color: var(--text); }
+        .tab.active { background: var(--tab-active); color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+        .card h2 { font-size: 14px; color: var(--text-muted); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric { font-size: 28px; font-weight: 700; }
+        .metric.green { color: var(--green); }
+        .metric.red { color: var(--red); }
+        .metric-sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+        /* Form */
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .form-group input, .form-group select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; outline: none; transition: border-color 0.2s; }
+        .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+        .form-group input::placeholder { color: #555; }
+
+        /* Buttons */
+        .btn-group { display: flex; gap: 8px; margin-top: 16px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-secondary { background: var(--border); color: var(--text); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Status */
+        #status { padding: 8px 12px; border-radius: 6px; font-size: 13px; display: none; margin-bottom: 16px; }
+        #status.loading { display: block; background: #1a2a4a; color: var(--accent); }
+        #status.error { display: block; background: #3a1a1a; color: var(--red); }
+        #status.success { display: block; background: #1a3a2a; color: var(--green); }
+
+        /* Chart */
+        .chart-container { min-height: 300px; }
+
+        /* Table */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+        th { color: var(--text-muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+        tr:hover td { background: rgba(79,140,255,0.05); }
+
+        /* Full width card */
+        .full-width { grid-column: 1 / -1; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+            .form-row, .form-row.cols-3 { grid-template-columns: 1fr; }
+            .tabs { flex-wrap: wrap; }
+            .tab { min-width: 48%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>QuantFQ</h1>
+        <span class="version">v2.0.0 量化交易仪表盘</span>
+    </div>
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('backtest')">回测</button>
+            <button class="tab" onclick="switchTab('screener')">选股</button>
+            <button class="tab" onclick="switchTab('portfolio')">组合</button>
+            <button class="tab" onclick="switchTab('optimizer')">优化</button>
+        </div>
+        <div id="status"></div>
+
+        <!-- ==================== BACKTEST TAB ==================== -->
+        <div id="tab-backtest" class="tab-content active">
+            <div class="grid">
+                <div class="card">
+                    <h2>参数配置</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>股票代码</label>
+                            <input type="text" id="bt-symbol" value="000001.SZ" placeholder="如 000001.SZ / 600519.SH">
+                        </div>
+                        <div class="form-group">
+                            <label>数据源</label>
+                            <select id="bt-source">
+                                <option value="yahoo">Yahoo Finance</option>
+                                <option value="akshare">AkShare</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>开始日期</label>
+                            <input type="date" id="bt-start" value="2024-01-01">
+                        </div>
+                        <div class="form-group">
+                            <label>结束日期</label>
+                            <input type="date" id="bt-end" value="2024-12-31">
+                        </div>
+                    </div>
+                    <div class="form-row cols-3">
+                        <div class="form-group">
+                            <label>初始资金</label>
+                            <input type="number" id="bt-capital" value="1000000" step="100000">
+                        </div>
+                        <div class="form-group">
+                            <label>手续费率</label>
+                            <input type="number" id="bt-commission" value="0.001" step="0.0001">
+                        </div>
+                        <div class="form-group">
+                            <label>滑点</label>
+                            <input type="number" id="bt-slippage" value="0.0" step="0.0001">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>策略</label>
+                            <select id="bt-strategy" onchange="toggleStrategyParams()">
+                                <option value="sma">均线交叉 (SMA)</option>
+                                <option value="rsi">相对强弱 (RSI)</option>
+                                <option value="bollinger">布林带 (Bollinger)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>快线周期</label>
+                            <input type="number" id="bt-fast" value="10" min="1">
+                        </div>
+                    </div>
+                    <div class="form-group" id="bt-slow-group">
+                        <label>慢线周期</label>
+                        <input type="number" id="bt-slow" value="30" min="1">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="runBacktest()" id="bt-run-btn">开始回测</button>
+                        <button class="btn btn-secondary" onclick="clearResults('backtest')">清空</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>快速统计</h2>
+                    <div id="bt-stats">
+                        <div class="metric">--</div>
+                        <div class="metric-sub">运行回测查看结果</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px">
+                <h2>资金曲线</h2>
+                <div id="bt-equity-chart" class="chart-container"></div>
+            </div>
+            <div class="card">
+                <h2>绩效指标</h2>
+                <div id="bt-metrics"><p style="color:var(--text-muted)">暂无数据</p></div>
+            </div>
+        </div>
+
+        <!-- ==================== SCREENER TAB ==================== -->
+        <div id="tab-screener" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>筛选条件</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>开始日期</label>
+                            <input type="date" id="sc-start" value="2024-01-01">
+                        </div>
+                        <div class="form-group">
+                            <label>结束日期</label>
+                            <input type="date" id="sc-end" value="2024-06-01">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>最低价格 (元)</label>
+                            <input type="number" id="sc-min-price" value="5" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>最高价格 (元)</label>
+                            <input type="number" id="sc-max-price" value="50" step="1">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>最低成交量</label>
+                            <input type="number" id="sc-min-vol" value="1000000" step="100000">
+                        </div>
+                        <div class="form-group">
+                            <label>最大市盈率</label>
+                            <input type="number" id="sc-max-pe" value="30" step="1">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>最低净资产收益率 (%)</label>
+                        <input type="number" id="sc-min-roe" value="10" step="1">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="runScreener()" id="sc-run-btn">开始选股</button>
+                        <button class="btn btn-secondary" onclick="clearResults('screener')">清空</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>筛选摘要</h2>
+                    <div id="sc-stats">
+                        <div class="metric">--</div>
+                        <div class="metric-sub">运行选股器查找候选股票</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>候选股票</h2>
+                <div id="sc-results"><p style="color:var(--text-muted)">暂无筛选结果</p></div>
+            </div>
+        </div>
+
+        <!-- ==================== PORTFOLIO TAB ==================== -->
+        <div id="tab-portfolio" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>组合配置</h2>
+                    <div class="form-group">
+                        <label>股票代码 (逗号分隔)</label>
+                        <input type="text" id="pf-symbols" value="000001.SZ, 600519.SH, 000858.SZ" placeholder="如 000001.SZ, 600519.SH">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>开始日期</label>
+                            <input type="date" id="pf-start" value="2024-01-01">
+                        </div>
+                        <div class="form-group">
+                            <label>结束日期</label>
+                            <input type="date" id="pf-end" value="2024-12-31">
+                        </div>
+                    </div>
+                    <div class="form-row cols-3">
+                        <div class="form-group">
+                            <label>初始资金</label>
+                            <input type="number" id="pf-capital" value="1000000" step="100000">
+                        </div>
+                        <div class="form-group">
+                            <label>分配方式</label>
+                            <select id="pf-allocation">
+                                <option value="equal_weight">等权重</option>
+                                <option value="market_cap">市值加权</option>
+                                <option value="custom">自定义权重</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>再平衡</label>
+                            <select id="pf-rebalance">
+                                <option value="monthly">每月</option>
+                                <option value="weekly">每周</option>
+                                <option value="quarterly">每季</option>
+                                <option value="none">不调整</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="runPortfolio()" id="pf-run-btn">开始回测</button>
+                        <button class="btn btn-secondary" onclick="clearResults('portfolio')">清空</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>组合统计</h2>
+                    <div id="pf-stats">
+                        <div class="metric">--</div>
+                        <div class="metric-sub">运行组合回测查看统计</div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <h2>组合净值</h2>
+                    <div id="pf-equity-chart" class="chart-container"></div>
+                </div>
+                <div class="card">
+                    <h2>持仓分布</h2>
+                    <div id="pf-allocation-chart" class="chart-container"></div>
+                </div>
+            </div>
+            <div class="card">
+                <h2>持仓明细</h2>
+                <div id="pf-positions"><p style="color:var(--text-muted)">暂无组合数据</p></div>
+            </div>
+        </div>
+
+        <!-- ==================== OPTIMIZER TAB ==================== -->
+        <div id="tab-optimizer" class="tab-content">
+            <div class="grid">
+                <div class="card">
+                    <h2>优化设置</h2>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>股票代码</label>
+                            <input type="text" id="opt-symbol" value="000001.SZ" placeholder="如 000001.SZ">
+                        </div>
+                        <div class="form-group">
+                            <label>优化方法</label>
+                            <select id="opt-method">
+                                <option value="grid">网格搜索</option>
+                                <option value="random">随机搜索</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>开始日期</label>
+                            <input type="date" id="opt-start" value="2024-01-01">
+                        </div>
+                        <div class="form-group">
+                            <label>结束日期</label>
+                            <input type="date" id="opt-end" value="2024-12-31">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>快线周期 (逗号分隔)</label>
+                            <input type="text" id="opt-fast" value="5, 10, 20" placeholder="如 5, 10, 20">
+                        </div>
+                        <div class="form-group">
+                            <label>慢线周期 (逗号分隔)</label>
+                            <input type="text" id="opt-slow" value="30, 60, 120" placeholder="如 30, 60, 120">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>优化目标</label>
+                            <select id="opt-metric">
+                                <option value="sharpe_ratio">夏普比率</option>
+                                <option value="total_return">总收益率</option>
+                                <option value="calmar_ratio">卡尔玛比率</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="opt-iter-group">
+                            <label>迭代次数 (仅随机搜索)</label>
+                            <input type="number" id="opt-iter" value="50" min="10">
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="runOptimizer()" id="opt-run-btn">开始优化</button>
+                        <button class="btn btn-secondary" onclick="clearResults('optimizer')">清空</button>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2>最优结果</h2>
+                    <div id="opt-stats">
+                        <div class="metric">--</div>
+                        <div class="metric-sub">运行优化器查找最优参数</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="margin-bottom:16px">
+                <h2>参数热力图</h2>
+                <div id="opt-heatmap" class="chart-container"></div>
+            </div>
+            <div class="card">
+                <h2>全部结果</h2>
+                <div id="opt-results"><p style="color:var(--text-muted)">暂无优化结果</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '';
+
+        // ==================== Tab Switching ====================
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        // ==================== Status ====================
+        function showStatus(msg, type) {
+            const el = document.getElementById('status');
+            el.textContent = msg;
+            el.className = type;
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => { el.className = ''; }, 5000);
+            }
+        }
+
+        function setBtnLoading(id, loading) {
+            const btn = document.getElementById(id);
+            btn.disabled = loading;
+            btn.textContent = loading ? '运行中...' : btn.dataset.orig || btn.textContent;
+            if (!loading) btn.dataset.orig = btn.textContent;
+        }
+
+        // ==================== Backtest ====================
+        function toggleStrategyParams() {
+            const strat = document.getElementById('bt-strategy').value;
+            const slowGroup = document.getElementById('bt-slow-group');
+            if (strat === 'rsi') {
+                slowGroup.style.display = 'none';
+            } else {
+                slowGroup.style.display = '';
+            }
+        }
+
+        async function runBacktest() {
+            const body = {
+                symbol: document.getElementById('bt-symbol').value,
+                start_date: document.getElementById('bt-start').value,
+                end_date: document.getElementById('bt-end').value,
+                source: document.getElementById('bt-source').value,
+                initial_capital: parseFloat(document.getElementById('bt-capital').value),
+                commission: parseFloat(document.getElementById('bt-commission').value),
+                slippage: parseFloat(document.getElementById('bt-slippage').value),
+                strategy: document.getElementById('bt-strategy').value,
+                params: {
+                    fast_period: parseInt(document.getElementById('bt-fast').value),
+                    slow_period: parseInt(document.getElementById('bt-slow').value),
+                },
+            };
+            showStatus(`正在运行 ${body.symbol} 回测...`, 'loading');
+            setBtnLoading('bt-run-btn', true);
+            try {
+                const resp = await fetch(`${API}/api/backtest/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { showStatus(`错误: ${data.detail}`, 'error'); return; }
+                showStatus(`${body.symbol} 回测完成`, 'success');
+                renderBacktestResults(data);
+            } catch (e) {
+                showStatus(`网络错误: ${e.message}`, 'error');
+            } finally {
+                setBtnLoading('bt-run-btn', false);
+            }
+        }
+
+        function renderBacktestResults(data) {
+            const m = data.metrics || {};
+            const tr = m.total_return || 0;
+            const sharpe = m.sharpe_ratio || 0;
+            const mdd = m.max_drawdown || 0;
+            const cls = tr >= 0 ? 'green' : 'red';
+            document.getElementById('bt-stats').innerHTML = `
+                <div class="metric ${cls}">${(tr * 100).toFixed(2)}%</div>
+                <div class="metric-sub">总收益率</div>
+                <div style="margin-top:12px"><span style="font-size:18px;font-weight:600">${sharpe.toFixed(2)}</span><span style="color:var(--text-muted);font-size:13px"> 夏普比率</span></div>
+                <div style="margin-top:4px"><span style="font-size:18px;font-weight:600;color:var(--red)">${(mdd * 100).toFixed(2)}%</span><span style="color:var(--text-muted);font-size:13px"> 最大回撤</span></div>
+            `;
+            const eq = data.equity_curve;
+            if (eq && eq.total_value) {
+                const dates = Object.keys(eq.total_value);
+                const vals = Object.values(eq.total_value);
+                Plotly.newPlot('bt-equity-chart', [{
+                    x: dates, y: vals, type: 'scatter', mode: 'lines',
+                    line: {color: '#4f8cff', width: 2}, fill: 'tozeroy', fillcolor: 'rgba(79,140,255,0.1)',
+                }], {
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: {color: '#888'}, margin: {l: 60, r: 20, t: 10, b: 40},
+                    xaxis: {gridcolor: '#2a2d3a'}, yaxis: {gridcolor: '#2a2d3a', title: '资金净值'},
+                }, {responsive: true});
+            }
+            const rows = Object.entries(m).filter(([k]) => !k.startsWith('_'))
+                .map(([k, v]) => `<tr><td>${k}</td><td>${typeof v === 'number' ? v.toFixed(4) : v}</td></tr>`).join('');
+            document.getElementById('bt-metrics').innerHTML = `<table><thead><tr><th>指标</th><th>数值</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }
+
+        // ==================== Screener ====================
+        async function runScreener() {
+            const body = {
+                start_date: document.getElementById('sc-start').value,
+                end_date: document.getElementById('sc-end').value,
+                min_price: parseFloat(document.getElementById('sc-min-price').value),
+                max_price: parseFloat(document.getElementById('sc-max-price').value),
+                min_volume: parseFloat(document.getElementById('sc-min-vol').value),
+                max_pe: parseFloat(document.getElementById('sc-max-pe').value),
+                min_roe: parseFloat(document.getElementById('sc-min-roe').value),
+            };
+            showStatus('正在扫描 A 股市场...', 'loading');
+            setBtnLoading('sc-run-btn', true);
+            try {
+                const resp = await fetch(`${API}/api/screener/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { showStatus(`错误: ${data.detail}`, 'error'); return; }
+                showStatus(`找到 ${data.candidates ? data.candidates.length : 0} 只候选股票`, 'success');
+                renderScreenerResults(data);
+            } catch (e) {
+                showStatus(`网络错误: ${e.message}`, 'error');
+            } finally {
+                setBtnLoading('sc-run-btn', false);
+            }
+        }
+
+        function renderScreenerResults(data) {
+            const cands = data.candidates || [];
+            document.getElementById('sc-stats').innerHTML = `
+                <div class="metric green">${cands.length}</div>
+                <div class="metric-sub">候选股票</div>
+                <div style="margin-top:12px;color:var(--text-muted);font-size:13px">${data.summary || ''}</div>
+            `;
+            if (cands.length === 0) {
+                document.getElementById('sc-results').innerHTML = '<p style="color:var(--text-muted)">没有符合条件的股票</p>';
+                return;
+            }
+            const headers = Object.keys(cands[0]);
+            const ths = headers.map(h => `<th>${h}</th>`).join('');
+            const rows = cands.map(c => '<tr>' + headers.map(h => `<td>${c[h] ?? '-'}</td>`).join('') + '</tr>').join('');
+            document.getElementById('sc-results').innerHTML = `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+        }
+
+        // ==================== Portfolio ====================
+        async function runPortfolio() {
+            const symbols = document.getElementById('pf-symbols').value.split(',').map(s => s.trim()).filter(Boolean);
+            if (symbols.length === 0) { showStatus('请至少输入一个股票代码', 'error'); return; }
+            const body = {
+                symbols,
+                start_date: document.getElementById('pf-start').value,
+                end_date: document.getElementById('pf-end').value,
+                initial_capital: parseFloat(document.getElementById('pf-capital').value),
+                allocation: document.getElementById('pf-allocation').value,
+                rebalance: document.getElementById('pf-rebalance').value,
+            };
+            showStatus(`正在运行 ${symbols.length} 只股票的组合回测...`, 'loading');
+            setBtnLoading('pf-run-btn', true);
+            try {
+                const resp = await fetch(`${API}/api/portfolio/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { showStatus(`错误: ${data.detail}`, 'error'); return; }
+                showStatus('组合回测完成', 'success');
+                renderPortfolioResults(data);
+            } catch (e) {
+                showStatus(`网络错误: ${e.message}`, 'error');
+            } finally {
+                setBtnLoading('pf-run-btn', false);
+            }
+        }
+
+        function renderPortfolioResults(data) {
+            const m = data.metrics || {};
+            const tr = m.total_return || 0;
+            const cls = tr >= 0 ? 'green' : 'red';
+            document.getElementById('pf-stats').innerHTML = `
+                <div class="metric ${cls}">${(tr * 100).toFixed(2)}%</div>
+                <div class="metric-sub">组合收益率</div>
+                <div style="margin-top:12px"><span style="font-size:18px;font-weight:600">${(m.sharpe_ratio || 0).toFixed(2)}</span><span style="color:var(--text-muted);font-size:13px"> Sharpe</span></div>
+            `;
+            if (data.equity_curve) {
+                const eq = data.equity_curve;
+                const dates = Object.keys(eq);
+                const vals = Object.values(eq);
+                Plotly.newPlot('pf-equity-chart', [{
+                    x: dates, y: vals, type: 'scatter', mode: 'lines',
+                    line: {color: '#4f8cff', width: 2}, fill: 'tozeroy', fillcolor: 'rgba(79,140,255,0.1)',
+                }], {
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: {color: '#888'}, margin: {l: 60, r: 20, t: 10, b: 40},
+                    xaxis: {gridcolor: '#2a2d3a'}, yaxis: {gridcolor: '#2a2d3a', title: '净值'},
+                }, {responsive: true});
+            }
+            if (data.allocation) {
+                const labels = Object.keys(data.allocation);
+                const values = Object.values(data.allocation);
+                Plotly.newPlot('pf-allocation-chart', [{
+                    labels, values, type: 'pie', hole: 0.4,
+                    marker: {colors: ['#4f8cff', '#26a69a', '#ef5350', '#ffa726', '#ab47bc', '#78909c']},
+                    textinfo: 'label+percent', textfont: {color: '#e0e0e0', size: 12},
+                }], {
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: {color: '#888'}, margin: {l: 20, r: 20, t: 10, b: 10},
+                }, {responsive: true});
+            }
+            const positions = data.positions || [];
+            if (positions.length > 0) {
+                const headers = Object.keys(positions[0]);
+                const ths = headers.map(h => `<th>${h}</th>`).join('');
+                const rows = positions.map(p => '<tr>' + headers.map(h => `<td>${p[h] ?? '-'}</td>`).join('') + '</tr>').join('');
+                document.getElementById('pf-positions').innerHTML = `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+            }
+        }
+
+        // ==================== Optimizer ====================
+        async function runOptimizer() {
+            const fastPeriods = document.getElementById('opt-fast').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            const slowPeriods = document.getElementById('opt-slow').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            const body = {
+                symbol: document.getElementById('opt-symbol').value,
+                start_date: document.getElementById('opt-start').value,
+                end_date: document.getElementById('opt-end').value,
+                method: document.getElementById('opt-method').value,
+                param_grid: {fast_period: fastPeriods, slow_period: slowPeriods},
+                metric: document.getElementById('opt-metric').value,
+                n_iter: parseInt(document.getElementById('opt-iter').value),
+            };
+            const methodNames = {grid: '网格搜索', random: '随机搜索'};
+            showStatus(`正在运行${methodNames[body.method] || body.method}优化 (${fastPeriods.length * slowPeriods.length} 种组合)...`, 'loading');
+            setBtnLoading('opt-run-btn', true);
+            try {
+                const resp = await fetch(`${API}/api/optimizer/run`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (!resp.ok) { showStatus(`错误: ${data.detail}`, 'error'); return; }
+                showStatus('优化完成', 'success');
+                renderOptimizerResults(data);
+            } catch (e) {
+                showStatus(`网络错误: ${e.message}`, 'error');
+            } finally {
+                setBtnLoading('opt-run-btn', false);
+            }
+        }
+
+        function renderOptimizerResults(data) {
+            const best = data.best || {};
+            const metric = data.metric || 'sharpe_ratio';
+            document.getElementById('opt-stats').innerHTML = `
+                <div class="metric green">${(best[metric] || 0).toFixed(4)}</div>
+                <div class="metric-sub">最优 ${metric === 'sharpe_ratio' ? '夏普比率' : metric === 'total_return' ? '总收益率' : '卡尔玛比率'}</div>
+                <div style="margin-top:12px;color:var(--text-muted);font-size:13px">
+                    最优参数: ${JSON.stringify(best.params || {})}
+                </div>
+            `;
+            const results = data.results || [];
+            if (results.length > 0 && data.heatmap) {
+                const h = data.heatmap;
+                Plotly.newPlot('opt-heatmap', [{
+                    z: h.z, x: h.x, y: h.y, type: 'heatmap',
+                    colorscale: 'Viridis', showscale: true,
+                }], {
+                    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                    font: {color: '#888'}, margin: {l: 60, r: 40, t: 10, b: 40},
+                    xaxis: {title: h.x_label || '慢线周期', gridcolor: '#2a2d3a'},
+                    yaxis: {title: h.y_label || '快线周期', gridcolor: '#2a2d3a'},
+                }, {responsive: true});
+            }
+            if (results.length > 0) {
+                const headers = Object.keys(results[0]);
+                const ths = headers.map(h => `<th>${h}</th>`).join('');
+                const rows = results.map(r => {
+                    const isBest = JSON.stringify(r.params) === JSON.stringify(best.params);
+                    return `<tr style="${isBest ? 'background:rgba(79,140,255,0.1)' : ''}">` +
+                        headers.map(h => `<td>${typeof r[h] === 'number' ? r[h].toFixed(4) : (r[h] ?? '-')}</td>`).join('') + '</tr>';
+                }).join('');
+                document.getElementById('opt-results').innerHTML = `<table><thead><tr>${ths}</tr></thead><tbody>${rows}</tbody></table>`;
+            }
+        }
+
+        // ==================== Clear ====================
+        function clearResults(section) {
+            const map = {
+                backtest: {stats: 'bt-stats', charts: ['bt-equity-chart'], extra: ['bt-metrics']},
+                screener: {stats: 'sc-stats', charts: [], extra: ['sc-results']},
+                portfolio: {stats: 'pf-stats', charts: ['pf-equity-chart', 'pf-allocation-chart'], extra: ['pf-positions']},
+                optimizer: {stats: 'opt-stats', charts: ['opt-heatmap'], extra: ['opt-results']},
+            };
+            const cfg = map[section];
+            if (!cfg) return;
+            document.getElementById(cfg.stats).innerHTML = '<div class="metric">--</div><div class="metric-sub">已清空</div>';
+            cfg.charts.forEach(id => { Plotly.purge(id); });
+            cfg.extra.forEach(id => { document.getElementById(id).innerHTML = '<p style="color:var(--text-muted)">暂无数据</p>'; });
+        }
+    </script>
+</body>
+</html>

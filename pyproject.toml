@@ -1,0 +1,105 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantfq"
+description = "A-share quantitative trading framework with backtesting, screening, portfolio management, parameter optimization, and web dashboard"
+authors = [
+    {name = "QuantF", email = "codemac@163.com"}
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+dependencies = [
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.4.0",
+    "yfinance>=0.1.70",
+    "requests>=2.25.0",
+    "akshare>=1.13.0",
+    "plotly>=5.0.0",
+]
+
+# Auto-read version from the VERSION file at build time
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
+[project.optional-dependencies]
+talib = [
+    "TA-Lib>=0.4.24",
+]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+]
+dev = [
+    "black>=21.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "sphinx>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ayermac/quantfq"
+Repository = "https://github.com/ayermac/quantfq"
+Issues = "https://github.com/ayermac/quantfq/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantfq*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
