@@ -15,16 +15,41 @@ class AkshareDataProvider:
     for 10x+ speed improvement on A-share screening.
     """
 
-    def get_snapshot(self) -> pd.DataFrame:
+    def get_snapshot(self, retries: int = 3) -> pd.DataFrame:
         """Fetch full A-share market real-time snapshot.
 
         Returns DataFrame with columns including:
         symbol, name, price, change_pct, volume, amount, market_cap.
+        Falls back to basic stock list (code + name) if real-time snapshot fails.
         """
+        import time
         import akshare as ak
 
+        df = None
+        for attempt in range(retries):
+            try:
+                df = ak.stock_zh_a_spot_em()
+                break
+            except Exception as e:
+                if attempt < retries - 1:
+                    wait = 2 ** attempt
+                    logger.warning(f"Snapshot fetch failed (attempt {attempt+1}/{retries}), retry in {wait}s: {e}")
+                    time.sleep(wait)
+                else:
+                    logger.warning(f"Real-time snapshot unavailable, falling back to stock list: {e}")
+
+        if df is None or df.empty:
+            try:
+                df = ak.stock_info_a_code_name()
+                if df is not None and not df.empty:
+                    df = df.rename(columns={"code": "symbol", "name": "name"})
+                    logger.info(f"Fallback: fetched {len(df)} stocks from stock_info_a_code_name")
+                    return df
+            except Exception as e2:
+                logger.error(f"Fallback also failed: {e2}")
+            return pd.DataFrame()
+
         try:
-            df = ak.stock_zh_a_spot_em()
             if df is None or df.empty:
                 logger.warning("akshare stock_zh_a_spot_em returned empty")
                 return pd.DataFrame()
